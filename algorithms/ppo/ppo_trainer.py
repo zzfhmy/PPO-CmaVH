@@ -162,7 +162,6 @@ class PPOTrainer():
                     intrinsic_reward = intrinsic_reward / self.s_ent_stats.mean
                 returns_batch = returns_batch + intrinsic_reward
                 
-
             if self.use_clipped_value_loss:
                 value_pred_clipped = value_preds_batch + (values - value_preds_batch).clamp(-self.clip_param, self.clip_param)
                 value_losses = (values - returns_batch).pow(2)
