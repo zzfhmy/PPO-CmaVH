@@ -68,7 +68,6 @@ class PPOTrainer():
         obs_batch = check(obs_batch).to(**self.tpdv)
         actions_batch = check(actions_batch).to(**self.tpdv)
 
-        #使用原本的PPO更新
         if self.use_ppoloss:
             # Obtain the loss function两种value，values是带熵的，extr_values是不带熵的
             values, action_log_probs, dist_entropy = policy.evaluate_actions(obs_batch, rnn_states_actor_batch, rnn_states_critic_batch, actions_batch, masks_batch)
@@ -80,7 +79,6 @@ class PPOTrainer():
             policy_loss = -policy_loss.mean()
 
             extr_return_batch = returns_batch
-            # 计算intrinsic_reward
             if self.use_state_reward:
                 if self.use_vcse : 
                     intrinsic_reward = self.compute_intr_reward_vcse(rnn_states_actor_batch, extr_values)
@@ -120,37 +118,32 @@ class PPOTrainer():
             policy.optimizer.step()
 
             return policy_loss, value_loss, policy_entropy_loss, ratio, actor_grad_norm, critic_grad_norm 
-
-        #使用PPOCMA方法更新   
+  
         else:
-            #先更新协方差矩阵
             action_log_probs_var = policy.evaluate_actions_var(obs_batch, rnn_states_actor_batch, rnn_states_critic_batch, actions_batch, masks_batch)
-            # Detach gradients for policy mean and variance
             ratio_var = torch.exp(action_log_probs_var - old_action_log_probs_batch)
             surr1_var = ratio_var * advantages_batch
             surr2_var = torch.clamp(ratio_var, 1.0 - self.clip_param, 1.0 + self.clip_param) * advantages_batch
             policyvar_loss = torch.sum(torch.min(surr1_var, surr2_var), dim=-1, keepdim=True)
             policyvar_loss = -policyvar_loss.mean()
-            # Optimize the loss function
             policy.actor_optimizer.zero_grad()
             policyvar_loss.backward()
             policy.actor_optimizer.step()
 
-            ##再更新Mean网络和价值网络
-            action_log_probs_mean = policy.evaluate_actions_mean(obs_batch, rnn_states_actor_batch, rnn_states_critic_batch, actions_batch, masks_batch)
-            # Detach gradients for policy mean and variance
+           
+            action_log_probs_mean = policy.evaluate_actions_mean(obs_batch, rnn_states_actor_batch, rnn_states_critic_batch, actions_batch, masks_batch
             ratio_mean = torch.exp(action_log_probs_mean - old_action_log_probs_batch)
             surr1_mean = ratio_mean * advantages_batch
             surr2_mean = torch.clamp(ratio_mean, 1.0 - self.clip_param, 1.0 + self.clip_param) * advantages_batch
             policymean_loss = torch.sum(torch.min(surr1_mean, surr2_mean), dim=-1, keepdim=True)
             policymean_loss = -policymean_loss.mean()
 
-            # Obtain the loss function两种value，values是带熵的，extr_values是不带熵的
+            
             values, _, dist_entropy = policy.evaluate_actions(obs_batch, rnn_states_actor_batch, rnn_states_critic_batch, actions_batch, masks_batch)
             extr_values, _ = policy.extr_critic(obs_batch, rnn_states_critic_batch, masks_batch)
             
             extr_return_batch = returns_batch
-            # 计算intrinsic_reward
+            
             if self.use_state_reward:
                 if self.use_vcse : 
                     intrinsic_reward = self.compute_intr_reward_vcse(obs_batch, extr_values)
